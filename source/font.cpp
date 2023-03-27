@@ -1,15 +1,22 @@
-// Note: See "main.cpp" for headers.
+﻿// Note: See "main.cpp" for headers.
 // This file was extracted to improve the organization of the code,
 // but it is still compiled in the "main.cpp" translation unit,
 // because both files have mostly the same dependencies (OpenGL, GLM, FreeType).
+/* 注：请参阅"main.cpp"以了解此cpp文件的头文件
+ * 此文件只是从main.cpp抽取了出来，它扔在main.cpp翻译单元中编译
+ * 因为两个文件都有共同的依赖项（OpenGL, GLM, FreeType）
+ */
 
+//字体
 class Font {
+	//字形
 	struct Glyph {
-		FT_UInt index;
-		int32_t bufferIndex;
+		FT_UInt index;			//该字符的下标，可由FT_Get_Char_Index获得
+		int32_t bufferIndex;	//在glyph buffer中的索引
 
-		int32_t curveCount;
+		int32_t curveCount;		//该字符的曲线个数
 
+		//glyph度量值（单位：Font units,即字体单位）
 		// Important glyph metrics in font units.
 		FT_Pos width, height;
 		FT_Pos bearingX;
@@ -17,20 +24,32 @@ class Font {
 		FT_Pos advance;
 	};
 
+	//字形（在Buffer中的位置）
 	struct BufferGlyph {
+		//start 开始位置
+		//count 曲线个数
 		int32_t start, count; // range of bezier curves belonging to this glyph
 	};
 
+	//曲线（即为贝塞尔曲线，由三个控制点所组成）
 	struct BufferCurve {
+		//三个顶点坐标
 		float x0, y0, x1, y1, x2, y2;
 	};
+	/*单位：EM长方形内的归一数值
+	  1. 轮廓中存储的单位是Font units（如1000）
+	  2. 但在convertContour()当中，会除以emSize（如2048）
+	  3. 因此，这里存的是相对于一个EM宽度的数值（如1000/2048=0.488）
+	 */
 
+	//顶点数据
 	struct BufferVertex {
 		float   x, y, u, v;
 		int32_t bufferIndex;
 	};
 
 public:
+	//加载字体
 	static FT_Face loadFace(FT_Library library, const std::string& filename, std::string& error) {
 		FT_Face face = NULL;
 
@@ -60,6 +79,12 @@ public:
 
 	// If hinting is enabled, worldSize must be an integer and defines the font size in pixels used for hinting.
 	// Otherwise, worldSize can be an arbitrary floating-point value.
+	/*若打开提示(hinting=true)，则
+		1. worldSize必须是整数
+		2. 并定义用于提示字体的大小（像素单位）
+	  否则，worldSize可以是任意浮点值
+	 */
+	//@param worldSize: 字体大小，单位：磅
 	Font(FT_Face face, float worldSize = 1.0f, bool hinting = false) : face(face), worldSize(worldSize), hinting(hinting) {
 
 		if (hinting) {
@@ -101,7 +126,7 @@ public:
 		glBindVertexArray(0);
 
 		{
-			uint32_t charcode = 0;
+			uint32_t charcode = 0; //空字符
 			FT_UInt glyphIndex = 0;
 			FT_Error error = FT_Load_Glyph(face, glyphIndex, loadFlags);
 			if (error) {
@@ -112,6 +137,7 @@ public:
 			buildGlyph(charcode, glyphIndex);
 		}
 
+		//处理ASCII [32, 128)的字符
 		for (uint32_t charcode = 32; charcode < 128; charcode++) {
 			FT_UInt glyphIndex = FT_Get_Char_Index(face, charcode);
 			if (!glyphIndex) continue;
@@ -127,10 +153,13 @@ public:
 
 		uploadBuffers();
 
+		// 绑定纹理
+		//uniform isamplerBuffer glyphs;
 		glBindTexture(GL_TEXTURE_BUFFER, glyphTexture);
 		glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, glyphBuffer);
 		glBindTexture(GL_TEXTURE_BUFFER, 0);
 
+		//uniform samplerBuffer curves;	
 		glBindTexture(GL_TEXTURE_BUFFER, curveTexture);
 		glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, curveBuffer);
 		glBindTexture(GL_TEXTURE_BUFFER, 0);
@@ -152,6 +181,7 @@ public:
 	}
 
 public:
+	// 设置字符大小
 	void setWorldSize(float worldSize) {
 		if (worldSize == this->worldSize) return;
 		this->worldSize = worldSize;
@@ -222,6 +252,7 @@ public:
 	}
 
 private:
+	// 更新字形的缓冲区
 	void uploadBuffers() {
 		glBindBuffer(GL_TEXTURE_BUFFER, glyphBuffer);
 		glBufferData(GL_TEXTURE_BUFFER, sizeof(BufferGlyph) * bufferGlyphs.size(), bufferGlyphs.data(), GL_STATIC_DRAW);
@@ -232,7 +263,9 @@ private:
 		glBindBuffer(GL_TEXTURE_BUFFER, 0);
 	}
 
+	// 构建一个字符
 	void buildGlyph(uint32_t charcode, FT_UInt glyphIndex) {
+		// 解析字符的轮廓
 		BufferGlyph bufferGlyph;
 		bufferGlyph.start = static_cast<int32_t>(bufferCurves.size());
 
@@ -248,6 +281,7 @@ private:
 		int32_t bufferIndex = static_cast<int32_t>(bufferGlyphs.size());
 		bufferGlyphs.push_back(bufferGlyph);
 
+		//存储字形信息（单位：Font Units，即字体单位）
 		Glyph glyph;
 		glyph.index = glyphIndex;
 		glyph.bufferIndex = bufferIndex;
@@ -263,6 +297,11 @@ private:
 	// This function takes a single contour (defined by firstIndex and
 	// lastIndex, both inclusive) from outline and converts it into individual
 	// quadratic bezier curves, which are added to the curves vector.
+	/*
+	 *\brief 将一个字形的轮廓线转换为一个二次贝塞尔曲线，并添加到curves进行存储
+	 *\param	curves:		所有字形的轮廓线
+	 *\param	outline:	一个字形的轮廓线
+	 */
 	void convertContour(std::vector<BufferCurve>& curves, const FT_Outline* outline, short firstIndex, short lastIndex, float emSize) {
 		// See https://freetype.org/freetype2/docs/glyphs/glyphs-6.html
 		// for a detailed description of the outline format.
@@ -446,6 +485,8 @@ private:
 	// Decodes the first Unicode code point from the null-terminated UTF-8 string *text and advances *text to point at the next code point.
 	// If the encoding is invalid, advances *text by one byte and returns 0.
 	// *text should not be empty, because it will be advanced past the null terminator.
+	/*将字符解析成charcode
+	 */
 	uint32_t decodeCharcode(const char** text) {
 		uint8_t first = static_cast<uint8_t>((*text)[0]);
 
@@ -492,19 +533,23 @@ public:
 		GLint location;
 
 		location = glGetUniformLocation(program, "glyphs");
-		glUniform1i(location, 0);
+		glUniform1i(location, 0); //纹理插槽 0
 		location = glGetUniformLocation(program, "curves");
-		glUniform1i(location, 1);
+		glUniform1i(location, 1); //纹理插槽 1
 
+		//0纹理插槽，绑定glyphTexture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_BUFFER, glyphTexture);
 
+		//1纹理插槽，绑定curveTexture
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_BUFFER, curveTexture);
 
 		glActiveTexture(GL_TEXTURE0);
 	}
 
+	// 绘制一个文本
+	//@x,y:	绘制原点
 	void draw(float x, float y, const std::string& text) {
 		float originalX = x;
 		
@@ -513,12 +558,14 @@ public:
 		std::vector<BufferVertex> vertices;
 		std::vector<int32_t> indices;
 
-		FT_UInt previous = 0;
+		FT_UInt previous = 0; //前一个字符
 		for (const char* textIt = text.c_str(); *textIt != '\0'; ) {
 			uint32_t charcode = decodeCharcode(&textIt);
 
+			//回车（光标到达行首）
 			if (charcode == '\r') continue;
 
+			//换行
 			if (charcode == '\n') {
 				x = originalX;
 				y -= (float)face->height / (float)face->units_per_EM * worldSize;
@@ -527,9 +574,10 @@ public:
 			}
 
 			auto glyphIt = glyphs.find(charcode);
-			Glyph& glyph = (glyphIt == glyphs.end()) ? glyphs[0] : glyphIt->second;
+			Glyph& glyph = (glyphIt == glyphs.end()) ? glyphs[0] : glyphIt->second; //没有则用第0个，即一个正方形代替，表示乱码
 
 			if (previous != 0 && glyph.index != 0) {
+				//FT_Get_Kerning接口是用于获取两个字符之间的字距调整值（kerning value），以便在文本渲染中对它们进行适当的位置调整
 				FT_Vector kerning;
 				FT_Error error = FT_Get_Kerning(face, previous, glyph.index, kerningMode, &kerning);
 				if (!error) {
@@ -551,6 +599,7 @@ public:
 				float x1 = x + u1 * worldSize;
 				float y1 = y + v1 * worldSize;
 
+				//四边形的四个顶点
 				int32_t base = static_cast<int32_t>(vertices.size());
 				vertices.push_back(BufferVertex{x0, y0, u0, v0, glyph.bufferIndex});
 				vertices.push_back(BufferVertex{x1, y0, u1, v0, glyph.bufferIndex});
@@ -578,6 +627,8 @@ public:
 		float minX, minY, maxX, maxY;
 	};
 
+	// 计算给定文本的边界框
+	//param x,y:	原点坐标
 	BoundingBox measure(float x, float y, const std::string& text) {
 		BoundingBox bb;
 		bb.minX = +std::numeric_limits<float>::infinity();
@@ -590,12 +641,14 @@ public:
 		FT_UInt previous = 0;
 		for (const char* textIt = text.c_str(); *textIt != '\0'; ) {
 			uint32_t charcode = decodeCharcode(&textIt);
+			char c = charcode;
 
 			if (charcode == '\r') continue;
 
+			//换行：当前位置向下移动一个字体高度的距离
 			if (charcode == '\n') {
-				x = originalX;
-				y -= (float)face->height / (float)face->units_per_EM * worldSize;
+				x = originalX;	//x回到原点
+				y -= (float)face->height / (float)face->units_per_EM * worldSize; //y向下移动
 				if (hinting) y = std::round(y);
 				continue;
 			}
@@ -603,6 +656,7 @@ public:
 			auto glyphIt = glyphs.find(charcode);
 			Glyph& glyph = (glyphIt == glyphs.end()) ? glyphs[0] : glyphIt->second;
 
+			//考虑了字符之间的调整（kerning），以确保字符之间的间距看起来更加平滑和自然
 			if (previous != 0 && glyph.index != 0) {
 				FT_Vector kerning;
 				FT_Error error = FT_Get_Kerning(face, previous, glyph.index, kerningMode, &kerning);
@@ -642,6 +696,12 @@ private:
 	// If hinting is not enabled, we scale all coordinates ourselves (see comment for emSize).
 	// If hinting is enabled, we must let FreeType scale the outlines for the hinting to work properly.
 	// The variables loadFlags and kerningMode are set in the constructor and control this scaling behavior.
+	/*该实例是否启用了hinting（提示）
+	 *注意，启用提示的情况下，我们改变了操作FreeType的方式
+	 * 1. 如果没有启用提示，我们将自己缩放所有坐标（参见：emSize的注释）
+	 * 2. 如果启用了提示，我们必须让FreeType缩放轮廓以使提示正常工作
+	 * 在构造函数中设置变量loadFlags和kerningMode来控制伸缩行为
+	 */
 	bool hinting;
 	FT_Int32 loadFlags;
 	FT_Kerning_Mode kerningMode;
@@ -654,19 +714,36 @@ private:
 	// Following the FreeType convention, if hinting (and therefore scaling) is enabled,
 	// this value is in 1/64th of a pixel (compatible with 26.6 fixed point numbers).
 	// If hinting/scaling is not enabled, this value is in font units.
+	/* 用于将度量转换为em相对值的em方块大小，然后可以缩放到worldSize
+		我们自己用浮点来进行缩放，以支持任意大小的世界（然而，如果世界大小很小，FreeType使用的定点数字就没有足够的分辨率）
+		按照FreeType的约定，如果启用了提示（因为缩放），这个值是一个像素的1/64。如果没有启用 提示/缩放，该值以字体单位表示
+	 */
 	float emSize;
 
 	float  worldSize;
 
+	//vao顶点数组对象（即打包一个vbo、ebo）
+	//vbo顶点缓冲区对象（顶点的属性集）
+	//ebo元素缓冲区（顶点的索引）
 	GLuint vao, vbo, ebo;
-	GLuint glyphTexture, curveTexture;
-	GLuint glyphBuffer, curveBuffer;
+	
+	/*
+	 *1. 本字体所有字形的轮廓线都存储在bufferCurves当中，用BufferGlyph来记录各个字形的索引
+	 *2. 对于bufferGlyphs、bufferCurves，是当成Texture传入GPU的，因此还需要两个纹理插槽
+	 */
+	GLuint glyphTexture, curveTexture;	//glyphBuffer、curveBuffer实际上是使用的Texture的缓冲区
+	GLuint glyphBuffer, curveBuffer;	//在GPU中，bufferGlyphs、bufferCurves的缓冲区ID
 
-	std::vector<BufferGlyph> bufferGlyphs;
-	std::vector<BufferCurve> bufferCurves;
+	std::vector<BufferGlyph> bufferGlyphs;	//N个字形（对bufferCurves的索引）
+	std::vector<BufferCurve> bufferCurves;	//N个字形的轮廓线都存储在这里
+
+	/*存储字形的规格
+	 *key: 字符的int值
+	 */
 	std::unordered_map<uint32_t, Glyph> glyphs;
 
 public:
+	//着色器id
 	// ID of the shader program to use.
 	GLuint program = 0;
 

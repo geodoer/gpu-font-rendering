@@ -1,18 +1,20 @@
-#version 330 core
+﻿#version 330 core
 
 // Based on: http://wdobbie.com/post/gpu-text-rendering-with-vector-textures/
 
+//字形描述
 struct Glyph {
-	int start, count;
+	int start, count; //Curves中的索引
 };
 
+//二次贝塞尔曲线
 struct Curve {
 	vec2 p0, p1, p2;
 };
 
-uniform isamplerBuffer glyphs;
-uniform samplerBuffer curves;
-uniform vec4 color;
+uniform isamplerBuffer glyphs;	//字形缓冲纹理（存储所有的字形描述）
+uniform samplerBuffer curves;	//曲线缓冲纹理（存储所有字形的贝塞尔曲线）
+uniform vec4 color;	//字体颜色
 
 
 // Controls for debugging and exploring:
@@ -35,14 +37,17 @@ flat in int bufferIndex;
 
 out vec4 result;
 
+// 根据索引，从glyphs中加载Glyph
 Glyph loadGlyph(int index) {
 	Glyph result;
-	ivec2 data = texelFetch(glyphs, index).xy;
+	ivec2 data = texelFetch(glyphs, index).xy; 
+		//texelFetch直接从缓冲区中取出像素值，不进行插值处理
 	result.start = data.x;
 	result.count = data.y;
 	return result;
 }
 
+// 根据索引，从curves中加载Curve
 Curve loadCurve(int index) {
 	Curve result;
 	result.p0 = texelFetch(curves, 3*index+0).xy;
@@ -51,6 +56,7 @@ Curve loadCurve(int index) {
 	return result;
 }
 
+// 计算覆盖率
 float computeCoverage(float inverseDiameter, vec2 p0, vec2 p1, vec2 p2) {
 	if (p0.y > 0 && p1.y > 0 && p2.y > 0) return 0.0;
 	if (p0.y < 0 && p1.y < 0 && p2.y < 0) return 0.0;
@@ -100,6 +106,7 @@ float computeCoverage(float inverseDiameter, vec2 p0, vec2 p1, vec2 p2) {
 	return alpha;
 }
 
+// 顺时针旋转90°
 vec2 rotate(vec2 v) {
 	return vec2(v.y, -v.x);
 }
@@ -131,6 +138,7 @@ void main() {
 	alpha = clamp(alpha, 0.0, 1.0);
 	result = color * alpha;
 
+	// 显示控制点
 	if (enableControlPointsVisualization) {
 		// Visualize control points.
 		vec2 fw = fwidth(uv);

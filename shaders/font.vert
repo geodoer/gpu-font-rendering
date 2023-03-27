@@ -1,4 +1,4 @@
-#version 330 core
+﻿#version 330 core
 
 uniform mat4 projection;
 uniform mat4 view;
@@ -10,6 +10,7 @@ layout (location = 2) in int  vertexIndex;
 
 out vec2 uv;
 flat out int bufferIndex;
+//flat声明一个标量或向量变量是“平面的”（即不会被插值）
 
 void main() {
 	gl_Position = projection * view * model * vec4(vertexPosition, 0, 1);

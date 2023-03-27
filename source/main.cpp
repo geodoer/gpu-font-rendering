@@ -1,4 +1,4 @@
-#include <cmath>
+﻿#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -21,6 +21,7 @@
 
 #include "font.cpp"
 
+//摄像机的变换矩阵
 struct Transform {
 	float fovy         = glm::radians(60.0f);
 	float distance     = 0.42f;
@@ -37,7 +38,9 @@ struct Transform {
 	}
 };
 
+//拖拽控制器
 struct DragController {
+	//交互动作
 	enum class Action {
 		NONE,
 		TRANSLATE,
@@ -201,6 +204,7 @@ struct DragController {
 		}
 	}
 
+	//鼠标滚动
 	void onScroll(GLFWwindow* window, double xOffset, double yOffset) {
 		float factor = glm::clamp(1.0-float(yOffset)/10.0, 0.1, 1.9);
 		transform->distance = glm::clamp(transform->distance * factor, 0.010f, 10.000f);
@@ -224,7 +228,7 @@ namespace {
 	std::unique_ptr<Font> mainFont;
 	std::unique_ptr<Font> helpFont;
 
-	constexpr float helpFontBaseSize = 20.0f;
+	constexpr float helpFontBaseSize = 20.0f; //字体大小（单位：磅）
 
 	int antiAliasingWindowSize = 1;
 	bool enableSuperSamplingAntiAliasing = true;
@@ -257,10 +261,13 @@ equally real, but because they are only assumptions. The one contains what is
 accepted as necessary when it is not yet so; the others, what is imagined as
 possible and, a moment later, is possible no longer.
 
-[from Invisible Cities by Italo Calvino])DONE";
+[from Invisible Cities by Italo Calvino]
+我是谁)DONE";
 
 }
 
+//加载字体
+//@filename:	文件名称
 static std::unique_ptr<Font> loadFont(const std::string& filename, float worldSize = 1.0f, bool hinting = false) {
 	std::string error;
 	FT_Face face = Font::loadFace(library, filename, error);
@@ -272,6 +279,7 @@ static std::unique_ptr<Font> loadFont(const std::string& filename, float worldSi
 	return std::make_unique<Font>(face, worldSize, hinting);
 }
 
+//加载主字体
 static void tryUpdateMainFont(const std::string& filename) {
 	auto font = loadFont(filename, 0.05f);
 	if (!font) return;
@@ -388,20 +396,24 @@ int main(int argc, char* argv[]) {
 
 	glGenVertexArrays(1, &emptyVAO);
 
+	//着色器
 	shaderCatalog = std::make_unique<ShaderCatalog>("shaders");
 	backgroundShader = shaderCatalog->get("background");
 	fontShader = shaderCatalog->get("font");
 
+	//加载主字体，计算mainText
 	tryUpdateMainFont("fonts/SourceSerifPro-Regular.otf");
 
+	//Help字体
 	{
 		float xscale, yscale;
-		glfwGetWindowContentScale(window, &xscale, &yscale);
+		glfwGetWindowContentScale(window, &xscale, &yscale); //窗口缩放
 		float worldSize = std::ceil(helpFontBaseSize * yscale);
 		helpFont = loadFont("fonts/SourceSansPro-Semibold.otf", worldSize, true);
 	}
 
 	while(!glfwWindowShouldClose(window)) {
+		//轮询shader是否更新
 		shaderCatalog->update();
 
 		glfwPollEvents();
@@ -423,7 +435,7 @@ int main(int argc, char* argv[]) {
 			GLuint program = backgroundShader->program;
 			glUseProgram(program);
 			glBindVertexArray(emptyVAO);
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); 
 			glBindVertexArray(0);
 			glUseProgram(0);
 		}
@@ -447,6 +459,7 @@ int main(int argc, char* argv[]) {
 			location = glGetUniformLocation(program, "model");
 			glUniformMatrix4fv(location, 1, false, glm::value_ptr(model));
 
+			//字体颜色
 			location = glGetUniformLocation(program, "color");
 			glUniform4f(location, 1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -459,6 +472,7 @@ int main(int argc, char* argv[]) {
 
 			float cx = 0.5f * (bb.minX + bb.maxX);
 			float cy = 0.5f * (bb.minY + bb.maxY);
+			//绘制
 			mainFont->draw(-cx, -cy, mainText);
 			glUseProgram(0);
 		}

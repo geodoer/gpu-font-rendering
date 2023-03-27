@@ -1,4 +1,4 @@
-#include "shader_catalog.hpp"
+﻿#include "shader_catalog.hpp"
 
 #include <chrono>
 #include <fstream>

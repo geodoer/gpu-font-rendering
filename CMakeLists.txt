@@ -30,7 +30,17 @@ target_compile_definitions(freetype PUBLIC FT_CONFIG_OPTION_ERROR_STRINGS)
 
 add_subdirectory("dependencies/efsw")
 
-add_executable(main "source/main.cpp" "source/shader_catalog.cpp")
+set(Sources
+    "source/glm.hpp"
+    "source/shader_catalog.hpp"
+    "source/main.cpp"
+    "source/shader_catalog.cpp"
+    "shaders/background.frag"
+    "shaders/background.vert"
+    "shaders/font.frag"
+    "shaders/font.vert"
+)
+add_executable(main "${Sources}")
 set_target_properties(main PROPERTIES CXX_STANDARD 14)
 target_include_directories(main PUBLIC "dependencies/include")
 target_link_libraries(main OpenGL::GL glfw glad glm freetype efsw)
